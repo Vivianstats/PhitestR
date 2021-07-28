@@ -1,5 +1,5 @@
 ---
-title: "Introduction to Phitest"
+title: "Introduction to PhitestR"
 author: "Wei Vivian Li, Rutgers Department of Biostatistics and Epidemiology"
 date: "`r Sys.Date()`"
 # output: github_document
@@ -12,17 +12,17 @@ output: rmarkdown::html_vignette
 
 
 
-`Phitest` currently supports two types of input: a UMI count matrix with cluster labels, or a Seurat object with cluster information.
+`PhitestR` currently supports two types of input: a UMI count matrix with cluster labels, or a Seurat object with cluster information.
 
-### Run `Phitest` with a count matrix
+### Run `PhitestR` with a count matrix
 
-To demonstrate the usage of `Phitest` with a count matrix, we use an example Cortex dataset which can be downloaded from this [link](https://rutgers.box.com/s/57cpndrph9h1cxyment4k2meg76y0lqx). To use `Phitest`, we need a count matrix (in this example, `object`) with rows representing genes and columns representing cells. In addition, we also need a (character or numeric) vector of labels (in this case, `label`) specifying the assignments of the cells.
+To demonstrate the usage of `PhitestR` with a count matrix, we use an example Cortex dataset which can be downloaded from this [link](https://rutgers.box.com/s/57cpndrph9h1cxyment4k2meg76y0lqx). To use PhitestR, we need a count matrix (in this example, `object`) with rows representing genes and columns representing cells. In addition, we also need a (character or numeric) vector of labels (in this case, `label`) specifying the assignments of the cells.
 ```{r eval = FALSE}
 data = readRDS("Cortex2_count.rds")
 object = data$count
 label = data$labels
 ```
-Now, to run `Phitest`, we just need to specify the count matrix, cluster labels, and the number of cores to be used in parallel computation. The result is a list containing two elements. The first element is a vector of \emph{P} values corresponding to the clusters in `label`. 
+Now, to run Phitest, we just need to specify the count matrix, cluster labels, and the number of cores to be used in parallel computation. The result is a list containing two elements. The first element is a vector of \emph{P} values corresponding to the clusters in `label`. 
 ```{r eval = FALSE}
 result = phitest(object, label, ncores = 2)
 result$pval
@@ -31,15 +31,15 @@ result$pval
 ```
 The second element is a named list of estimated parameters corresponding to the clusters. The list names are the cluster labels, and each element is a matrix with rows representing genes and columns representing estimated parameters. 
 
-### Run `Phitest` with a Seurat object
+### Run `PhitestR` with a Seurat object
 
-To demonstrate the usage of `Phitest` with a Seurat object, we use an example Cortex dataset which can be downloaded from this [link](https://rutgers.box.com/s/6keur2pxgi33tnfhh5a72jcykt8i1phi). This Cortex count matrix has been analyzed following Seurat's [tutorial](https://satijalab.org/seurat/articles/pbmc3k_tutorial.html). Suppose we use Seurat to cluster the cells with a resolution of 0.1, we can check if the clustering is successful by checking the `seurat_clusters` entry in the object. This entry is required in order to use `Phitest`.
+To demonstrate the usage of `PhitestR` with a Seurat object, we use an example Cortex dataset which can be downloaded from this [link](https://rutgers.box.com/s/6keur2pxgi33tnfhh5a72jcykt8i1phi). This Cortex count matrix has been analyzed following Seurat's [tutorial](https://satijalab.org/seurat/articles/pbmc3k_tutorial.html). Suppose we use Seurat to cluster the cells with a resolution of 0.1, we can check if the clustering is successful by checking the `seurat_clusters` entry in the object. This entry is required in order to use Phitest.
 ```{r eval = FALSE}
 data = readRDS("Cortex2_Seurat.rds")
 object = FindClusters(data, resolution = 0.1)
 table(object$seurat_clusters)
 ```
-Now, to run `Phitest`, we just need to specify the Seurat object and the number of cores to be used in parallel computation. The result is a list containing two elements. The first element is a vector of \emph{P} values corresponding to the clusters in `object$seurat_clusters`. For example, the first three \emph{P} values correspond to cluster 4, 1, and 0, respectively.
+Now, to run Phitest, we just need to specify the Seurat object and the number of cores to be used in parallel computation. The result is a list containing two elements. The first element is a vector of \emph{P} values corresponding to the clusters in `object$seurat_clusters`. For example, the first three \emph{P} values correspond to cluster 4, 1, and 0, respectively.
 ```{r eval = FALSE}
 result2 = phitest(object, ncores = 2)
 result2$pval[1:3]

@@ -26,13 +26,13 @@ and comments on the method, please contact Vivian
 
 ## Installation
 
-You can install `Phitest` from CRAN with:
+You can install `PhitestR` from CRAN with:
 
 ``` r
-install.packages("Phitest")
+install.packages("PhitestR")
 ```
 
 ## Usage
 
-Please see the Wiki page for a detailed documentation of the `Phitest`
+Please see the Wiki page for a detailed documentation of the `PhitestR`
 package.
