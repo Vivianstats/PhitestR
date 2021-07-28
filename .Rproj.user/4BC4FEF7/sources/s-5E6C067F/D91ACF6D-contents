@@ -1,0 +1,391 @@
+# library(Seurat)
+library(ClusterR)
+library(openxlsx)
+library(parallel)
+library(fitdistrplus)
+library(tidyverse)
+library(ROGUE)
+
+source("~/Box/Project/2020purity/code/supp-funs/clustering.R")
+source("~/Box/Project/2020purity/code/supp-funs/score.R")
+
+ncores = 16
+
+plot_dir = "~/Box/Project/2020purity/code/study4/"
+dir.create(plot_dir, recursive = FALSE)
+
+
+meta = read.xlsx("~/Box/Project/2020purity/code/datasheet.xlsx", sheet = 4)
+
+
+pars = c(0.001, 0.01, 0.1, 0.4, 0.8, 1.2)
+
+# for(dd in 1:6){
+#   print(meta$dataname[dd])
+#   data = readRDS(paste0(plot_dir, "Cortex", dd,  "-sim.rds"))
+# 
+#   count = data$count
+#   count = as.matrix(count)
+#   # count = count[!grepl("ERCC", rownames(count)), ]
+#   rownames(count) = paste0("gene", 1:nrow(count))
+#   colnames(count) = paste0(colnames(count), "-", 1:ncol(count))
+#   label = data$labels
+# 
+#   ### run Seurat ----------------------------------------------------
+#   objs =  run_seurat(count, pars = pars)
+#   saveRDS(objs, file = paste0(plot_dir, "objs-seurat-", meta$dataname[dd], ".rds"))
+# 
+#   label.clust = objs$clusters
+#   saveRDS(label.clust, file = paste0(plot_dir, "label-seurat-", meta$dataname[dd], ".rds"))
+#   rm(objs)
+#   gc()
+# }
+
+### run phitest and ROGUE ---------------------------------------------------
+for(dd in 1:6){
+  print(meta$dataname[dd])
+  data = readRDS(paste0(plot_dir, "Cortex", dd,  "-sim.rds"))
+
+  count = data$count
+  count = as.matrix(count)
+  # count = count[!grepl("ERCC", rownames(count)), ]
+  rownames(count) = paste0("gene", 1:nrow(count))
+  colnames(count) = paste0(colnames(count), "-", 1:ncol(count))
+  label = data$labels
+
+
+  label.clust = readRDS(paste0(plot_dir, "label-seurat-", meta$dataname[dd], ".rds"))
+  phires = lapply(label.clust, function(x){
+    res = lapply(unique(x), function(id){
+      cnt = count[, x == id]
+      tp = try(phitest(cnt, ncores), silent = TRUE)
+      return(tp)
+    })
+    return(res)
+  })
+  saveRDS(phires, file = paste0(plot_dir, "phires-seurat-", meta$dataname[dd], ".rds"))
+
+  rogueres = lapply(label.clust, function(x){
+    res = lapply(unique(x), function(id){
+      cnt = count[, x == id]
+      tp = try(run_rogue(cnt), silent = TRUE)
+      return(tp)
+    })
+    return(res)
+  })
+  saveRDS(rogueres, file = paste0(plot_dir, "rogueres-seurat-", meta$dataname[dd], ".rds"))
+}
+
+
+
+### Summarize results ----------------------------------------------------------
+library(ggplot2); theme_set(theme_classic())
+
+dir = "~/Box/Project/2020purity/code/study4/plot/seurat/"
+dir.create(dir, recursive = FALSE)
+
+
+for(dd in 1:6){
+  data = readRDS(paste0(plot_dir, "Cortex", dd,  "-sim.rds"))
+  label.clust = readRDS(paste0(plot_dir, "label-seurat-", meta$dataname[dd], ".rds"))
+
+  seurat_obj = readRDS(paste0(plot_dir, "objs-seurat-", meta$dataname[dd], ".rds"))
+
+  obj = seurat_obj$obj
+  obj = RunTSNE(obj, dims = 1:10)
+  obj$label = data$labels
+  ## plot TSNE
+  for(par in pars){
+    par = as.character(par)
+    label.c = label.clust[[par]]
+    names(label.c) = names(data$labels)
+    obj$seurat_clusters = label.c
+    pdf(paste0(dir, meta$dataname[dd], "-par-", par, ".pdf"), width = 8, height = 3)
+    p = DimPlot(obj, reduction = "tsne", group.by = c("seurat_clusters", "label"))
+    print(p)
+    dev.off()
+    # coord = Embeddings(obj[["umap"]])
+    # coord = as.data.frame(coord)
+    # names(coord) = c("Dim1", "Dim2")
+    # coord$label = obj$seurat_clusters
+    # coord$par = par
+  }
+  gc()
+}
+
+
+
+### compare identified cluster numbers ----------------------
+thre_phi = 0.1
+thre_rogue = 0.8
+da = lapply(1:6, function(dd){
+  data = readRDS(paste0(plot_dir, "Cortex", dd,  "-sim.rds"))
+  truel = as.numeric(factor(data$labels))
+
+  phires = readRDS(paste0(plot_dir, "phires-seurat-", meta$dataname[dd], ".rds"))
+  rogueres = readRDS(paste0(plot_dir, "rogueres-seurat-", meta$dataname[dd], ".rds"))
+  label.clust = readRDS(paste0(plot_dir, "label-seurat-", meta$dataname[dd], ".rds"))
+
+  k.true = length(unique(truel))
+  k.default = length(unique(label.clust[["0.8"]]))
+  phitest_n = sapply(phires, function(x){
+    p = sapply(x, function(tp) tp$pval)
+    # p = p.adjust(p, method = "bonferroni")
+    mean(p <= thre_phi)
+  })
+  # conservative
+  if(all(phitest_n == 0)){
+    par = as.character(min(pars))
+  }else{
+    par = as.character(pars[which(phitest_n == min(phitest_n))[1]])
+  }
+  k.phi.c = length(unique(label.clust[[par]]))
+  # liberal
+  if(all(phitest_n == 0)){
+    par = as.character(max(pars))
+  }else{
+    idx = which(phitest_n == min(phitest_n))
+    par = as.character(pars[idx[length(idx)]])
+  }
+  k.phi.l = length(unique(label.clust[[par]]))
+  
+  rogue_n = sapply(rogueres, function(x){
+    mean(unlist(x) <= thre_rogue)
+  })
+  # conservative
+  if(all(rogue_n == 0)){
+    par = as.character(min(pars))
+  }else{
+    par = as.character(pars[which(rogue_n == min(rogue_n))[1]])
+  }
+  k.rogue.c = length(unique(label.clust[[par]]))
+  # liberal
+  if(all(rogue_n == 0)){
+    par = as.character(max(pars))
+  }else{
+    idx = which(rogue_n == min(rogue_n))
+    par = as.character(pars[idx[length(idx)]])
+  }
+  k.rogue.l = length(unique(label.clust[[par]]))
+
+
+  # data.frame(K = c(k.true, k.default, k.phi.c, k.phi.l, k.rogue.c, k.rogue.l),
+  #            method = c("True", "Default", "Phitest-C", "Phitest-L", "ROGUE-C", "ROGUE-L"),
+  #            data = meta$dataname[dd])
+  data.frame(K = c(k.true, k.default, k.phi.c, k.rogue.c),
+             method = c("True", "Default", "Phitest", "ROGUE"),
+             data = meta$dataname[dd])
+})
+da = Reduce(rbind, da)
+da1 = da[da$method == "True",]
+da2 = da[da$method != "True",]
+da2$Ktrue = rep(da1$K, each = 3)
+#da2$method = factor(da2$method, levels = c("Phitest-C", "Phitest-L", "ROGUE-C", "ROGUE-L", "Default"))
+da2$method = factor(da2$method, levels = c("Phitest", "ROGUE", "Default"))
+
+# my_colors = RColorBrewer::brewer.pal(5, "Set1")[c(2,5,4,3)]
+my_colors = c("#377EB8", "#FF7F00", "#FDBF6F", "#33A02C", "#B2DF8A", "#984EA3")
+names(my_colors) = c("True", "Phitest", "Phitest-L", "ROGUE", "ROGUE-L", "Default")
+#da2$method = factor(da2$method, levels = c("Phitest", "ROGUE", "Default"))
+ggplot(da2, aes(x = method, y = K)) +
+  geom_point(cex = 3, aes(color = method)) +
+  geom_segment(aes(color = method, xend = method, yend = Ktrue)) +
+  facet_grid(~data) +
+  ylim(c(2,14)) +
+  geom_hline(data = da1, aes(yintercept = K), color = my_colors["True"]) +
+  scale_color_manual(values = my_colors) +
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+ggsave(paste0(dir, "cluster number.pdf"), width = 8.5, height = 3)
+
+
+
+### compare performance at identified cluster numbers ----------------------
+thre_phi = 0.1
+thre_rogue = 0.8
+### ARI
+da = lapply(1:6, function(dd){
+  data = readRDS(paste0(plot_dir, "Cortex", dd,  "-sim.rds"))
+  truel = as.numeric(factor(data$labels))
+
+  phires = readRDS(paste0(plot_dir, "phires-seurat-", meta$dataname[dd], ".rds"))
+  rogueres = readRDS(paste0(plot_dir, "rogueres-seurat-", meta$dataname[dd], ".rds"))
+  label.clust = readRDS(paste0(plot_dir, "label-seurat-", meta$dataname[dd], ".rds"))
+
+
+  ARI.default = external_validation(truel, label.clust[["0.8"]], method = "adjusted_rand_index")
+
+  phitest_n = sapply(phires, function(x){
+    p = sapply(x, function(tp) tp$pval)
+    #p = p.adjust(p, method = "bonferroni")
+    mean(p <= thre_phi)
+  })
+  # conservative
+  if(all(phitest_n == 0)){
+    par = as.character(min(pars))
+  }else{
+    par = as.character(pars[which(phitest_n == min(phitest_n))[1]])
+  }
+  ARI.phi.c = external_validation(truel, label.clust[[par]], method = "adjusted_rand_index")
+  # liberal
+  if(all(phitest_n == 0)){
+    par = as.character(max(pars))
+  }else{
+    idx = which(phitest_n == min(phitest_n))
+    par = as.character(pars[idx[length(idx)]])
+  }
+  ARI.phi.l = external_validation(truel, label.clust[[par]], method = "adjusted_rand_index")
+  
+
+  rogue_n = sapply(rogueres, function(x){
+    mean(unlist(x) <= thre_rogue)
+  })
+  # conservative
+  if(all(rogue_n == 0)){
+    par = as.character(min(pars))
+  }else{
+    par = as.character(pars[which(rogue_n == min(rogue_n))[1]])
+  }
+  ARI.rogue.c = external_validation(truel, label.clust[[par]], method = "adjusted_rand_index")
+  # liberal
+  if(all(rogue_n == 0)){
+    par = as.character(max(pars))
+  }else{
+    idx = which(rogue_n == min(rogue_n))
+    par = as.character(pars[idx[length(idx)]])
+  }
+  ARI.rogue.l = external_validation(truel, label.clust[[par]], method = "adjusted_rand_index")
+  
+  
+  # data.frame(ARI = c(ARI.default, ARI.phi.c, ARI.phi.l, ARI.rogue.c, ARI.rogue.l),
+  #            method = c("Default", "Phitest-C", "Phitest-L", "ROGUE-C", "ROGUE-L"),
+  #            data = meta$dataname[dd])
+  data.frame(ARI = c(ARI.default, ARI.phi.c, ARI.rogue.c),
+             method = c("Default", "Phitest", "ROGUE"),
+             data = meta$dataname[dd])
+})
+da = Reduce(rbind, da)
+da$method = factor(da$method, levels = c("Phitest", "ROGUE", "Default"))
+#my_colors = c("#FF7F00", "#FDBF6F", "#33A02C", "#B2DF8A", "#984EA3")
+my_colors = c("#FF7F00", "#33A02C", "#984EA3")
+names(my_colors) = levels(da$method)
+ggplot(da, aes(x = data, y = ARI, fill = method)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.5) +
+  scale_fill_manual(values = my_colors) +
+  xlab("") + ylab("")
+ggsave(paste0(dir, "ARI.pdf"), width = 8.5, height = 2.8)
+
+### Purity
+da = lapply(1:6, function(dd){
+  data = readRDS(paste0(plot_dir, "Cortex", dd,  "-sim.rds"))
+  truel = as.numeric(factor(data$labels))
+  
+  phires = readRDS(paste0(plot_dir, "phires-seurat-", meta$dataname[dd], ".rds"))
+  rogueres = readRDS(paste0(plot_dir, "rogueres-seurat-", meta$dataname[dd], ".rds"))
+  label.clust = readRDS(paste0(plot_dir, "label-seurat-", meta$dataname[dd], ".rds"))
+  
+  
+  ARI.default = external_validation(truel, label.clust[["0.8"]], method = "purity")
+  
+  phitest_n = sapply(phires, function(x){
+    p = sapply(x, function(tp) tp$pval)
+    #p = p.adjust(p, method = "bonferroni")
+    mean(p <= thre_phi)
+  })
+  # conservative
+  if(all(phitest_n == 0)){
+    par = as.character(min(pars))
+  }else{
+    par = as.character(pars[which(phitest_n == min(phitest_n))[1]])
+  }
+  ARI.phi.c = external_validation(truel, label.clust[[par]], method = "purity")
+  # liberal
+  if(all(phitest_n == 0)){
+    par = as.character(max(pars))
+  }else{
+    idx = which(phitest_n == min(phitest_n))
+    par = as.character(pars[idx[length(idx)]])
+  }
+  ARI.phi.l = external_validation(truel, label.clust[[par]], method = "purity")
+  
+  
+  rogue_n = sapply(rogueres, function(x){
+    mean(unlist(x) <= thre_rogue)
+  })
+  # conservative
+  if(all(rogue_n == 0)){
+    par = as.character(min(pars))
+  }else{
+    par = as.character(pars[which(rogue_n == min(rogue_n))[1]])
+  }
+  ARI.rogue.c = external_validation(truel, label.clust[[par]], method = "purity")
+  # liberal
+  if(all(rogue_n == 0)){
+    par = as.character(max(pars))
+  }else{
+    idx = which(rogue_n == min(rogue_n))
+    par = as.character(pars[idx[length(idx)]])
+  }
+  ARI.rogue.l = external_validation(truel, label.clust[[par]], method = "purity")
+  
+  
+  
+  data.frame(ARI = c(ARI.default, ARI.phi.c, ARI.phi.l, ARI.rogue.c, ARI.rogue.l),
+             method = c("Default", "Phitest-C", "Phitest-L", "ROGUE-C", "ROGUE-L"),
+             data = meta$dataname[dd])
+})
+da = Reduce(rbind, da)
+da$method = factor(da$method, levels = c("Phitest-C", "Phitest-L", "ROGUE-C", "ROGUE-L", "Default"))
+# my_colors = RColorBrewer::brewer.pal(5, "Set1")[c(5,3,4)]
+my_colors = c("#FF7F00", "#FDBF6F", "#33A02C", "#B2DF8A", "#984EA3")
+names(my_colors) = levels(da$method)
+ggplot(da, aes(x = data, y = ARI, fill = method)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.6) +
+  scale_fill_manual(values = my_colors) +
+  ylab("Purity")
+
+
+
+
+# ### compare decision with default parameters ----------------------
+# thre_phi = 0.01
+# thre_rogue = 0.824
+# da = lapply(1:6, function(dd){
+#   print(dd)
+#   data = readRDS(paste0(plot_dir, "Cortex", dd,  "-sim.rds"))
+#   truel = as.numeric(factor(data$labels))
+# 
+#   phires = readRDS(paste0(plot_dir, "phires-seurat-", meta$dataname[dd], ".rds"))
+#   rogueres = readRDS(paste0(plot_dir, "rogueres-seurat-", meta$dataname[dd], ".rds"))
+#   label.clust = readRDS(paste0(plot_dir, "label-seurat-", meta$dataname[dd], ".rds"))
+# 
+#   purity = sapply(1:max(label.clust[["0.8"]]), function(k){
+#     idx = which(label.clust[["0.8"]] == k)
+#     external_validation(truel[idx], label.clust[["0.8"]][idx], method = "purity")
+#   })
+#   y.purity = purity > 0.9
+#   print(y.purity)
+# 
+#   p = sapply(phires[["0.8"]], function(tp) tp$pval)
+#   phitest = p.adjust(p, method = "bonferroni")
+#   y.phi = phitest > thre_phi
+#   print(y.phi)
+# 
+#   rogue = unlist(rogueres[["0.8"]])
+#   y.rogue = rogue > thre_rogue
+#   print(y.rogue)
+#   gc()
+# 
+#   data.frame(Accuracy = c(mean(y.purity == y.phi),
+#                           mean(y.purity == y.rogue)),
+#              method = c("Phitest", "ROGUE"),
+#              data = meta$dataname[dd])
+# })
+# da = Reduce(rbind, da)
+# da$method = factor(da$method, levels = c("Phitest", "ROGUE"))
+# my_colors = RColorBrewer::brewer.pal(5, "Set1")[c(5,3)]
+# names(my_colors) = c("Phitest", "ROGUE")
+# ggplot(da, aes(x = data, y = Accuracy, fill = method)) +
+#   geom_bar(stat = "identity", position = "dodge", width = 0.6) +
+#   scale_fill_manual(values = my_colors)

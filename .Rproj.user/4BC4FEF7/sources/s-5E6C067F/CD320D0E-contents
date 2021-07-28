@@ -1,0 +1,41 @@
+---
+title: "Phitest: Analyzing the Heterogeneity of Single-Cell Populations"
+author: "Wei Vivian Li"
+
+date: "`r Sys.Date()`"
+output: github_document
+---
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r, echo = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "README-"
+)
+```
+
+
+## Latest News
+ 
+> 2021/07/28:
+
+ + Version 0.1.0 released!
+
+ 
+## Introduction
+
+Phitest is a bioinformatics method developed for analyzing the heterogeneity of single-cell populations. Phitest provides an objective and automatic method to evaluate the performance of clustering and quality of cell clusters.
+
+Any suggestions on the package are welcome! For technical problems, please report to [Issues](https://github.com/Vivianstats/Phitest/issues). For suggestions and comments on the method, please contact Vivian (<vivian.li@rutgers.edu>). 
+
+## Installation
+
+You can install `Phitest` from CRAN with:
+
+```{r gh-installation, eval = FALSE}
+install.packages("Phitest")
+```
+
+

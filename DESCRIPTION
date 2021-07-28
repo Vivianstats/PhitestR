@@ -1,0 +1,23 @@
+Package: Phitest
+Type: Package
+Title: Analyzing the Heterogeneity of Single-Cell Populations
+Version: 0.1.0
+Authors@R: 
+    person(given = "Wei Vivian",
+           family = "Li",
+           role = c("aut", "cre"),
+           email = "vivian.li@rutgers.edu",
+           comment = c(ORCID = "0000-0002-2087-2709"))
+Description: A bioinformatics method developed for analyzing the heterogeneity of single-cell populations. Phitest provides an objective and automatic method to evaluate the performance of clustering and quality of cell clusters.
+License: GPL-3
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.1.1
+Imports: 
+    parallel,
+    fitdistrplus,
+    Seurat
+Suggests: 
+    knitr, 
+    rmarkdown
+VignetteBuilder: knitr

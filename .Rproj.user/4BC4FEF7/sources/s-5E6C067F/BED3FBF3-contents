@@ -1,0 +1,216 @@
+library(ggplot2); theme_set(theme_classic())
+library(tidyr)
+library(fitdistrplus)
+library(parallel)
+library(openxlsx)
+# library(tidyverse)
+# library(ROGUE)
+
+ncores = 16
+
+meta = read.xlsx("~/Box/Project/2020purity/code/datasheet.xlsx")
+plot_dir = "~/Box/Project/2020purity/code/study1/"
+dir.create(plot_dir, recursive = FALSE)
+
+da = lapply(1:nrow(meta), function(i){
+  print(meta$dataname[i])
+  data = readRDS(paste0(meta$dir[i], ".rds"))
+  
+  count = data$count
+  count = as.matrix(count)
+  count = count[!grepl("ERCC", rownames(count)), ]
+  count = count[, colSums(count) > 1000]
+  count = count[rowSums(count > 0) > 10, ]
+  
+  print(ncol(count))
+  return(0)
+})
+
+## fit NB models -----------------------------------------------
+# for(dd in 1:nrow(meta)){
+for(dd in 9:10){
+  print(meta$dataname[dd])
+  data = readRDS(paste0(meta$dir[dd], ".rds"))
+
+  count = data$count
+  count = as.matrix(count)
+  count = count[!grepl("ERCC", rownames(count)), ]
+  count = count[, colSums(count) > 1000]
+  count = count[rowSums(count > 0) > 10, ]
+
+  ncell = ncol(count)
+  ngene = nrow(count)
+  print(paste("genes:", ngene))
+  print(paste("cells:", ncell))
+
+  # fit the negative binomial distribution
+  fitnb = mclapply(1:ngene, function(i){
+    if(i %% 1000 == 0) message(i)
+    fit = try(fitdist(count[i,], "nbinom"), silent = TRUE)#, method = "mme")
+    if(class(fit) == "try-error"){
+      mu = NA
+      disp = NA
+    }else{
+      mu = fit$estimate["mu"]
+      size = fit$estimate["size"]
+      # var.fit = mu + mu^2/size
+      disp = 1/size
+    }
+    return(c(mu, disp))
+  }, mc.cores = ncores)
+  fitnb = Reduce(rbind, fitnb)
+  colnames(fitnb) = c("mu", "dispersion")
+  rownames(fitnb) = rownames(count)
+  saveRDS(fitnb, file = paste0(plot_dir, meta$dataname[dd], "-fitnb.rds"))
+}
+
+
+### estimation ----------------------------------------
+da = lapply(1:nrow(meta), function(i){
+  print(meta$dataname[i])
+  data = readRDS(paste0(meta$dir[i], ".rds"))
+  
+  count = data$count
+  count = as.matrix(count)
+  count = count[!grepl("ERCC", rownames(count)), ]
+  count = count[, colSums(count) > 1000]
+  count = count[rowSums(count > 0) > 10, ]
+  
+  var = apply(count, 1, var)
+  mean = rowMeans(count)
+  
+  fit = readRDS(paste0(plot_dir, meta$dataname[i], "-fitnb.rds"))
+  res = as.data.frame(fit)
+  res$mean = mean
+  res$var = var
+  
+  # y = (res$var - res$mean)
+  # x = (res$mean)^2
+  # lm1 = lm(y ~ x + 0)
+  # phi = coef(lm1)
+  # print(phi)
+  qtx = quantile(mean, 0.999)
+  qty = quantile(var, 0.999)
+  idx = which(mean <= qtx & var <= qty)
+  y = (var[idx] - mean[idx])
+  x = (mean[idx])^2
+  lm1 = lm(y ~ x + 0)
+  phi = coef(lm1)
+  print(phi)
+  res$phi = phi
+  res$varfit.c = res$mean + (res$mean)^2 * phi
+  res$varfit = res$mean + (res$mean)^2 * res$dispersion
+  
+  ### zero percentage
+  d = rowMeans(count == 0)
+  # dhat = (1+phi * mean)^(-1/phi)
+  # ncell = ncol(count)
+  # zscore = (d - dhat)/sqrt(dhat * (1-dhat) / ncell)
+  # pval = 2 * pnorm(abs(zscore), lower.tail = FALSE)
+  # padj = p.adjust(pval, method = "fdr")
+  
+  res$d = d
+  res$dhat.c = (1+phi * mean)^(-1/phi)
+  res$dhat = (1+res$dispersion * mean)^(-1/res$dispersion)
+  # res$z = zscore
+  # res$pval = pval
+  # res$padj = padj
+  
+  res$study = meta[i, "dataname"]
+  res$type = meta[i, "type"]
+  gc()
+  return(res)
+})
+da = Reduce(rbind, da)
+
+studys = c("K562", "Brain1", "Brain2",
+           "B", "HEK293", "NIH3T3",
+           "Cortex1", "PBMC1", "Pancreas1",
+           "Cortex2", "PBMC2", "Pancreas2")
+da$study = factor(da$study, levels = studys)
+
+saveRDS(da, file = paste0(plot_dir, "da_estimation.rds"))
+
+
+### plot ------------------------------------------------
+da = readRDS(da, file = paste0(plot_dir, "da_estimation.rds"))
+
+ggplot(da, aes(y = dhat, x = d)) +
+  geom_point(aes(color = type), shape = 1) + # geom_smooth() +
+  geom_abline(intercept = 0, slope = 1) +
+  facet_wrap(~study, scales = "free", ncol = 3) +
+  xlab("Observed zero count frequency") + ylab("Estimated zero count frequency (gene-specific dispersion)") +
+  theme(legend.position = "bottom") +
+  scale_color_brewer(palette = "Set1") 
+ggsave(paste0(plot_dir, "dhat_vs_d.pdf"), width = 7, height = 6.5)
+
+
+ggplot(da, aes(y = dhat.c, x = dhat)) +
+  geom_point(aes(color = type), shape = 1) + # geom_smooth() +
+  geom_abline(intercept = 0, slope = 1) +
+  facet_wrap(~study, ncol = 3) +
+  theme(legend.position = "none") +
+  xlab("") + ylab("") +
+  scale_x_continuous(breaks = c(0,0.5,1)) +
+  scale_y_continuous(breaks = c(0,0.5,1)) +
+  scale_color_brewer(palette = "Set1") 
+ggsave(paste0(plot_dir, "dhatc_vs_dhat.pdf"), width = 5, height = 5)
+
+### calculation ------------------------------------------
+da = readRDS(paste0(plot_dir, "da_estimation.rds"))
+
+score = lapply(1:nrow(meta), function(i){
+  study = meta[i, "dataname"]
+  print(study)
+  data = readRDS(paste0(meta$dir[i], ".rds"))
+
+  count = data$count
+  count = as.matrix(count)
+  count = count[!grepl("ERCC", rownames(count)), ]
+  count = count[, colSums(count) > 1000]
+  count = count[rowSums(count > 0) > 10, ]
+
+  ent.res = SE_fun(count)
+  rogue.value = CalculateRogue(ent.res, platform = "UMI")
+
+  sub = da[da$study == study, ]
+  obj = t.test(sub$dhat.c, sub$dhat, alternative = "less")
+
+
+  res = data.frame(phitest = obj$p.value,
+                   rogue = rogue.value,
+                   study = study, type = meta[i, "type"])
+  gc()
+  return(res)
+})
+score = Reduce(rbind, score)
+saveRDS(score, file = paste0(plot_dir, "score.rds"))
+
+
+score = readRDS(paste0(plot_dir, "score.rds"))
+
+res = score
+res$study = factor(res$study, levels = studys)
+# res$phitest = p.adjust(res$phitest, method = "fdr")
+
+res$study = factor(res$study, levels = res$study[order(res$rogue)])
+ggplot(res, aes(y = 1 - rogue, x = study)) +
+  geom_bar(stat = "identity", width = 0.6, aes(fill = type)) +
+  # geom_hline(yintercept = 0.824) +
+  scale_fill_brewer(palette = "Set1") +
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  xlab("") + ylab("")
+ggsave(paste0(plot_dir, "ROGUE.pdf"), width = 3.8, height = 3)
+
+
+res$study = factor(res$study, levels = res$study[order(res$phitest, decreasing = F)])
+ggplot(res, aes(y = -log10(phitest), x = study)) +
+  geom_bar(stat = "identity", width = 0.5, aes(fill = type)) +
+  # geom_hline(yintercept = -log10(0.1)) +
+  scale_fill_brewer(palette = "Set1") +
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  xlab("") + ylab("")
+ggsave(paste0(plot_dir, "Phitest.pdf"), width = 3.8, height = 3)
+

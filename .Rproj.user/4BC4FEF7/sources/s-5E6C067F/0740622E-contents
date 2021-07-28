@@ -1,0 +1,49 @@
+rm(list = ls())
+install.packages("~/Box/Rpkg/Phitest-dev/Phitest_0.1.0.tar.gz", repos = NULL)
+
+# obj = readRDS("~/Box/Project/2020purity/code/study4/objs-seurat-Cortex2.rds")
+# obj = obj$obj
+# saveRDS(obj, file = "~/Box/Rpkg/Phitest-dev/data/Cortex2_Seurat.rds")
+
+# source("~/Box/Rpkg/Phitest-dev/phitest.R")
+#
+# library(parallel)
+# library(fitdistrplus)
+# library(Seurat)
+
+# data = readRDS("~/Box/Rpkg/Phitest-dev/data/Cortex2_count.rds")
+# object = data$count
+# label = data$labels
+# idx = which(label %in% c("Astrocyte", "Endothelial", "Oligodendrocyte"))
+# data$count = data$count[, idx]
+# data$labels = label[idx]
+# saveRDS(data, file = "~/Box/Rpkg/Phitest-dev/data/Cortex2_count.rds")
+
+data = readRDS("~/Box/Rpkg/data/Phitest/Cortex2_count.rds")
+object = data$count
+label = data$labels
+
+result = phitest(object, label, ncores = 2)
+result$pval
+
+data = readRDS("~/Box/Rpkg/data/Phitest/Cortex2_Seurat.rds")
+object = FindClusters(data, resolution = 0.1)
+result2 = phitest(object, ncores = 2)
+# saveRDS(result2, file = "~/Box/Rpkg/Phitest-dev/data/result2.rds")
+result2$pval
+labels = names(result2$par)
+par = lapply(labels, function(l){
+  tp = result2$par[[l]]
+  tp$cluster = l
+  return(tp)
+})
+par = Reduce(rbind, par)
+library(ggplot2)
+theme_set(theme_bw())
+ggplot(par, aes(x = dhat, y = dhat.c)) +
+  geom_point(shape = 1) +
+  geom_abline(intercept = 0, slope = 1, color = "red") +
+  facet_wrap(~cluster) +
+  xlab("Estimated frequency of zero count (gene-specific dispersion)") +
+  ylab("Estimated frequency of zero count (common dispersion)")
+ggsave("~/Box/Rpkg/Phitest-dev/Phitest/vignettes/Fig1.png", width = 6, height = 4)
