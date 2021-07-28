@@ -4,10 +4,10 @@ author: "Wei Vivian Li, Rutgers Department of Biostatistics and Epidemiology"
 date: "`r Sys.Date()`"
 # output: github_document
 output: rmarkdown::html_vignette
-# vignette: >
-#   %\VignetteIndexEntry{Introduction to Phitest}
-#   %\VignetteEngine{knitr::rmarkdown}
-#   %\VignetteEncoding{UTF-8}
+vignette: >
+  %\VignetteIndexEntry{Introduction to Phitest}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
 ---
 
 
