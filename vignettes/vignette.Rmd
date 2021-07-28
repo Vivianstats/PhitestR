@@ -2,12 +2,12 @@
 title: "Introduction to Phitest"
 author: "Wei Vivian Li, Rutgers Department of Biostatistics and Epidemiology"
 date: "`r Sys.Date()`"
-#output: rmarkdown::github_document
+# output: github_document
 output: rmarkdown::html_vignette
-vignette: >
-  %\VignetteIndexEntry{Phitest: Analyzing the Heterogeneity of Single-Cell Populations}
-  %\VignetteEngine{knitr::rmarkdown}
-  %\VignetteEncoding{UTF-8}
+# vignette: >
+#   %\VignetteIndexEntry{Introduction to Phitest}
+#   %\VignetteEngine{knitr::rmarkdown}
+#   %\VignetteEncoding{UTF-8}
 ---
 
 
