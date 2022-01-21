@@ -2,14 +2,20 @@
 % Please edit documentation in R/phitest.R
 \name{phitest}
 \alias{phitest}
-\title{The generic function for the Phitest method}
+\title{Appling the Phitest method to a count matrix}
 \usage{
-phitest(object, ...)
+phitest(object, label, ncores = 1, min.cell = 10)
 }
 \arguments{
-\item{object}{An object of single-cell data}
+\item{object}{A matrix of single-cell UMI counts (rows for genes and columns for cells).}
 
-\item{...}{Other parameters to be passed to the function.}
+\item{label}{A character or numeric vector of cluster labels. Length should be the same as
+cell number and order should match the order in \code{object}.}
+
+\item{ncores}{Number of cores used for parallel computation.}
+
+\item{min.cell}{An integer specifying a threshold to filter genes. Genes expressed in
+fewer than \code{min.cell} cells are filtered out.}
 }
 \value{
 A list of two elements: \code{pval} contains the \emph{P} values, and

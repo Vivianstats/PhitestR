@@ -1,7 +1,7 @@
 Package: PhitestR
 Type: Package
 Title: Analyzing the Heterogeneity of Single-Cell Populations
-Version: 0.1.0
+Version: 0.2.0
 Authors@R: 
     person(given = "Wei Vivian",
            family = "Li",
@@ -15,8 +15,7 @@ Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.1.1
 Imports: 
     parallel,
-    fitdistrplus,
-    Seurat
+    fitdistrplus
 Suggests: 
     knitr, 
     rmarkdown

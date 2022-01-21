@@ -1,11 +1,15 @@
 Phitest: Analyzing the Heterogeneity of Single-Cell Populations
 ================
 Wei Vivian Li
-2021-07-27
+2022-01-21
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
 ## Latest News
+
+> 2022/01/21:
+
+-   Version 0.2.0 released!
 
 > 2021/07/27:
 
